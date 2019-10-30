@@ -1,4 +1,5 @@
 module gd {
-	header "/usr/local/include/gd.h"
+
+	umbrella header "swiftgd_gd.h"
 	link "gd"
 }
