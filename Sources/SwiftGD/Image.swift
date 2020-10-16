@@ -49,7 +49,7 @@ public class Image {
 
         applyInterpolation(enabled: applySmoothing, currentSize: currentSize, newSize: newSize)
 
-        guard let output = gdImageScale(internalImage, UInt32(newSize.width), UInt32(newSize.height)) else { return nil }
+        guard let output = gdImageScale(internalImage, UInt32(width), UInt32(newSize.height)) else { return nil }
         return Image(gdImage: output)
     }
 
@@ -188,6 +188,14 @@ public class Image {
         gdImagePixelate(internalImage, Int32(blockSize), GD_PIXELATE_AVERAGE.rawValue)
     }
 
+    public func rotate(angle : Float) {
+        if let result = gdImageRotateInterpolated(internalImage, angle, 0) {
+            gdImageDestroy(internalImage)
+            internalImage = result
+        }
+        
+    }
+    
     public func blur(radius: Int) {
         if let result = gdImageCopyGaussianBlurred(internalImage, Int32(radius), -1) {
             gdImageDestroy(internalImage)
