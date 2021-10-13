@@ -86,6 +86,68 @@ public class Image {
         }
     }
 
+    /// Renders an UTF-8 string onto the image.
+    ///
+    /// The text will be rendered from the specified basepoint:
+    ///
+    ///     let basepoint = Point(x: 20, y: 200)
+    ///     image.renderText(
+    ///         "SwiftGD",
+    ///         from: basepoint,
+    ///         fontList: ["SFCompact"],
+    ///         color: .red,
+    ///         size: 100,
+    ///         angle: .degrees(90)
+    ///     )
+    ///
+    /// - Parameters:
+    ///   - text: The string to render.
+    ///   - from: The basepoint (roughly the lower left corner) of the first
+    ///     letter.
+    ///   - fontList: A list of font filenames to look for. The first match
+    ///     will be used.
+    ///   - color: The font color.
+    ///   - size: The height of the font in typographical points (pt).
+    ///   - angle: The angle to rotate the rendered text from the basepoint
+    ///     perspective. Positive angles rotate clockwise.
+    /// - Returns: The rendered text bounding box. You can use this output to
+    ///   render the text off-image first, and then render it again, on the
+    ///   image, with the bounding box information (e.g., to center-align the
+    ///   text).
+    @discardableResult
+    public func renderText(
+        _ text: String, from: Point, fontList: [String], color: Color, size: Double, angle: Angle = .zero
+    ) -> (upperLeft: Point, upperRight: Point, lowerRight: Point, lowerLeft: Point) {
+        /// Notes on `gdImageStringFT`:
+        /// - it returns an Tuple of empty `Point`s if there is nothing to render or no valid fonts
+        /// - `gdImageStringFT` accepts a semicolon delimited list of fonts.
+        /// - `gdImageStringFT` expects pointers to `text` and `fontList` values
+        guard !text.isEmpty,
+              !fontList.isEmpty,
+              var textCChar = text.cString(using: .utf8),
+              var joinedFonts = fontList.joined(separator: ";").cString(using: .utf8) else {
+                  return (upperLeft: .zero, upperRight: .zero, lowerRight: .zero, lowerLeft: .zero)
+        }
+        let red = Int32(color.redComponent * 255.0)
+        let green = Int32(color.greenComponent * 255.0)
+        let blue = Int32(color.blueComponent * 255.0)
+        let alpha = 127 - Int32(color.alphaComponent * 127.0)
+        let internalColor = gdImageColorAllocateAlpha(internalImage, red, green, blue, alpha)
+        defer { gdImageColorDeallocate(internalImage, internalColor) }
+
+        // `gdImageStringFT` returns the text bounding box, specified as four
+        // points in the following order:
+        // lower left, lower right, upper right, and upper left corner.
+        var boundingBox: [Int32] = .init(repeating: .zero, count: 8)
+        gdImageStringFT(internalImage, &boundingBox, internalColor, &joinedFonts, size, -angle.radians, Int32(from.x), Int32(from.y), &textCChar)
+
+        let lowerLeft = Point(x: boundingBox[0], y: boundingBox[1])
+        let lowerRight = Point(x: boundingBox[2], y: boundingBox[3])
+        let upperRight = Point(x: boundingBox[4], y: boundingBox[5])
+        let upperLeft = Point(x: boundingBox[6], y: boundingBox[7])
+        return (upperLeft, upperRight, lowerRight, lowerLeft)
+    }
+
     public func fill(from: Point, color: Color) {
         let red = Int32(color.redComponent * 255.0)
         let green = Int32(color.greenComponent * 255.0)
@@ -213,6 +275,18 @@ public class Image {
 
     public func desaturate() {
         gdImageGrayScale(internalImage)
+    }
+
+    /// Reduces `Image` to an indexed palette of colors from larger color spaces.
+    /// Index `Image`s only make sense with 2 or more colors, and will `throw` nonsense values
+    /// - Parameter numberOfColors: maximum number of colors
+    /// - Parameter shouldDither: true will apply GD’s internal dithering algorithm
+    public func reduceColors(max numberOfColors: Int, shouldDither: Bool = true) throws {
+        guard numberOfColors > 1 else {
+            throw Error.invalidMaxColors(reason: "Indexed images must have at least 2 colors")
+        }
+        let shouldDither: Int32 = shouldDither ? 1 : 0
+        gdImageTrueColorToPalette(internalImage, shouldDither, Int32(numberOfColors))
     }
 
     deinit {
