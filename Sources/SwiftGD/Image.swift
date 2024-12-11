@@ -193,6 +193,15 @@ public class Image {
         gdImageLine(internalImage, Int32(from.x), Int32(from.y), Int32(to.x), Int32(to.y), internalColor)
     }
 
+    public func drawImage(_ image:Image, at topLeft: Point = .zero) {
+        let width = Int32(self.size.width - topLeft.x)
+        let height = Int32(self.size.height - topLeft.y)
+        let dst_x = Int32(topLeft.x)
+        let dst_y = Int32(topLeft.y)
+
+        gdImageCopy(internalImage, image.internalImage, dst_x, dst_y, 0, 0, width, height)
+    }
+
     public func set(pixel: Point, to color: Color) {
         let red = Int32(color.redComponent * 255.0)
         let green = Int32(color.greenComponent * 255.0)
@@ -322,23 +331,27 @@ public class Image {
 
 extension Image {
     public convenience init?(url: URL) {
-        let inputFile = fopen(url.path, "rb")
-        defer { fclose(inputFile) }
-
-        guard inputFile != nil else { return nil }
-
-        let loadedImage: gdImagePtr?
-
-        if url.lastPathComponent.lowercased().hasSuffix("jpg") || url.lastPathComponent.lowercased().hasSuffix("jpeg") {
-            loadedImage = gdImageCreateFromJpeg(inputFile)
-        } else if url.lastPathComponent.lowercased().hasSuffix("png") {
-            loadedImage = gdImageCreateFromPng(inputFile)
-        } else {
+        guard let inputFile = fopen(url.path, "rb") else {
             return nil
         }
 
-        guard let image = loadedImage else { return nil }
-        self.init(gdImage: image)
+        defer { fclose(inputFile) }
+
+        let ext = url.lastPathComponent.lowercased()
+
+        let loadedImage: gdImagePtr? = if ext.hasSuffix("jpg") || ext.hasSuffix("jpeg") {
+            gdImageCreateFromJpeg(inputFile)
+        } else if ext.hasSuffix("png") {
+            gdImageCreateFromPng(inputFile)
+        } else {
+            nil
+        }
+
+        if let image = loadedImage {
+            self.init(gdImage: image)
+        } else {
+            return nil
+        }
     }
 
     @discardableResult
@@ -354,7 +367,10 @@ extension Image {
         }
 
         // open our output file, then defer it to close
-        let outputFile = fopen(url.path, "wb")
+        guard let outputFile = fopen(url.path, "wb") else {
+            return false
+        }
+
         defer { fclose(outputFile) }
 
         // write the correct output format based on the path extension
